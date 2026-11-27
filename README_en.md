@@ -207,6 +207,24 @@ selected paths.
 - The project list comes from Session working directories; with no Session at
   all there is nothing to select until one is opened.
 
+## Publish and install
+
+The package is `dsh-commit-plugin`: `npm login`, then `npm publish`
+(`publishConfig.access` is already `public`, and the `private` marker is gone).
+Only the `files` entries ship, so `test/` and `node_modules/` stay out of the
+tarball.
+
+Anyone else installs it by listing `dsh-commit-plugin` in their profile's
+`~/.dsh/profiles/<profile>/package.json`, both as a dependency and in
+`dsh.profile.bundles`, then installing that profile's dependencies once. For
+local development against a checkout, swap the dependency value for
+`link:/path/to/checkout`.
+
+The `api.dshfind.com/market/dsh-index.json` directory rebuilds itself daily from
+npm and only takes packages whose `repository.url` points back at their GitHub
+project, so keeping the `repository` field gets the plugin listed there; the
+other index, `realguan/dsh-plugin-market`, wants a pull request adding an entry.
+
 ## Files
 
 - `index.js` — Host half: git surface, same-origin API, `git_commit` tool, the

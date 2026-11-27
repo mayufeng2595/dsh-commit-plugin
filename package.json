@@ -1,10 +1,24 @@
 {
   "name": "dsh-commit-plugin",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Sidebar changes panel with per-file diff and selective git commit for DeepSeek Harness.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mayufeng2595/dsh-commit-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mayufeng2595/dsh-commit-plugin/issues"
+  },
+  "homepage": "https://github.com/mayufeng2595/dsh-commit-plugin#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "icon": "./icon.svg",
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.19.0"
   },
@@ -22,7 +36,8 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "README_en.md"
+    "README_en.md",
+    "LICENSE"
   ],
   "keywords": [
     "dsh",

@@ -149,6 +149,20 @@ Agent 工具提交的是会话当前的工作目录：不传 `paths` 就是所�
   `for-each-ref` 的 `%(upstream:short)`。
 - 项目列表来自会话的工作目录；一个会话都没有时，在打开会话之前没有可选的东西。
 
+## 发布与安装
+
+包名 `dsh-commit-plugin`，`npm login` 之后 `npm publish` 即可（`publishConfig.access`
+已经是 `public`，`private` 标记已去掉）。发出去的只有 `files` 列出的那些文件，`test/` 和
+`node_modules/` 都不在包里。
+
+别人装它，是在自己 profile 的 `~/.dsh/profiles/<profile>/package.json` 里把
+`dsh-commit-plugin` 写进依赖和 `dsh.profile.bundles`，然后在该 profile 下装一次依赖。
+本地开发想直接指向一份 checkout，就把依赖值换成 `link:/path/to/checkout`。
+
+插件目录 `api.dshfind.com/market/dsh-index.json` 每天抓取 npm，只收 `repository.url`
+能对上 GitHub 仓库的包，所以保留 package.json 里的 `repository` 字段就会被自动收录；
+另一个索引 `realguan/dsh-plugin-market` 需要去它的仓库提 PR 加条目。
+
 ## 文件
 
 - `index.js` — Host 一半：git 能力、同源接口、`git_commit` 工具，以及 `placement` 字段带
