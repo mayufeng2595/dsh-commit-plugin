@@ -210,8 +210,16 @@ const diffBox = elements(tree, 'div').filter(node => node.props.className === 'd
 assert.equal(diffBox.length, 1, 'the versions sit in one fixed-width box')
 const panes = elements(tree, 'div').filter(node => node.props.className === 'dshgc-pane')
 assert.equal(panes.length, 2, 'one pane per version')
-assert.ok(panes[0].props.style.flexBasis.endsWith('%'), 'the left pane carries the ratio')
-assert.ok(panes[1].props.style.flexBasis.endsWith('%'), 'the right pane carries the rest')
+// Both panes read one variable, so the drag can repaint without React.
+assert.deepEqual(diffBox[0].props.style, { '--dshgc-left-share': '50.00%' }, 'the box carries the share')
+assert.equal(panes[0].props.style.flexBasis, 'var(--dshgc-left-share,50%)', 'the left pane takes the share')
+assert.equal(panes[1].props.style.flexBasis, 'calc(100% - var(--dshgc-left-share,50%))', 'the right pane takes the rest')
+const wide = ui.renderBody({ ...baseView, splitRatio: 0.7 })
+assert.deepEqual(
+  elements(wide, 'div').find(node => node.props.className === 'dshgc-diff-box').props.style,
+  { '--dshgc-left-share': '70.00%' },
+  'a dragged ratio reaches the box as a percentage',
+)
 const scrollers = elements(tree, 'div').filter(node => node.props.className === 'dshgc-pane-scroll')
 assert.equal(scrollers.length, 2, 'each version owns a scroll area')
 assert.equal(typeof scrollers[0].props.onScroll, 'function', 'vertical scrolling is mirrored between panes')
