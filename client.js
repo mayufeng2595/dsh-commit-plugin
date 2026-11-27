@@ -365,6 +365,15 @@ window.__ModuleLoader__.load({
       'remote.done': '远程已更新',
       'remote.incomplete': '请填写完整的远程名称和 URL。',
       'remote.renameTo': '重命名为',
+      'remote.credential': '{name} 的凭据',
+      'remote.credentialHint': '这个远程需要账号验证。填入用户名和访问令牌后，git 会把它存进系统的凭据助手（macOS 上是钥匙串），之后的 fetch 和 push 就不再追问。GitHub 一类站点不接受登录密码，请生成 access token。',
+      'remote.credentialField': '用户名',
+      'remote.credentialSecret': '密码或访问令牌',
+      'remote.credentialIncomplete': '用户名和令牌都要填写。',
+      'remote.credentialDone': '凭据已保存，远程可以访问了',
+      'remote.credentialFailed': '凭据已保存，但 {name} 仍然拒绝访问，请检查用户名和令牌。',
+      'remote.authNeeded': '{name} 已保存，但它需要账号验证才能访问。',
+      'remote.auth': '这个远程需要账号验证。请在「管理远程」里为该远程填写用户名和访问令牌；git 在本插件里不会弹终端提问。原始信息：{message}',
     }
 
     const en = {
@@ -554,6 +563,15 @@ window.__ModuleLoader__.load({
       'remote.done': 'Remotes updated',
       'remote.incomplete': 'Give the remote both a name and a URL.',
       'remote.renameTo': 'rename to',
+      'remote.credential': 'Credentials for {name}',
+      'remote.credentialHint': 'This remote asks for authentication. A username plus an access token is handed to git\'s own credential helper (the Keychain on macOS), so later fetches and pushes stay quiet. Sites like GitHub no longer accept an account password; create an access token.',
+      'remote.credentialField': 'Username',
+      'remote.credentialSecret': 'Password or access token',
+      'remote.credentialIncomplete': 'Both the username and the token are needed.',
+      'remote.credentialDone': 'Credentials stored; the remote answers',
+      'remote.credentialFailed': 'Credentials stored, but {name} still refuses them. Check the username and the token.',
+      'remote.authNeeded': '{name} was saved, but it needs authentication before it can be reached.',
+      'remote.auth': 'This remote needs authentication. Open 管理远程 and give it a username and an access token; git never prompts from a terminal inside this plugin. Git said: {message}',
     }
 
     const PREFS_KEY = 'dsh-git-commit.prefs.v1'
@@ -660,6 +678,16 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Whether git's own words say a remote is waiting for someone to authenticate.
+     * @param {unknown} message - the text git produced.
+     * @returns {boolean} true when credentials are what is missing.
+     */
+    function authBlocked(message) {
+      return /terminal prompts disabled|could not read (?:Username|Password)|Authentication failed|incorrect username or password|invalid credentials/i
+        .test(String(message))
+    }
+
+    /**
      * The text one thrown error becomes in the panel. A `not-found` from the
      * Host means the running Host is older than this panel, which only a
      * restart of DSH fixes, so it gets said plainly rather than as a bare
@@ -670,7 +698,9 @@ window.__ModuleLoader__.load({
      */
     function errorText(t, error) {
       if (error instanceof Error && error.code === 'not-found') return t('op.stale')
-      return error instanceof Error ? error.message : String(error)
+      const message = error instanceof Error ? error.message : String(error)
+      // git is never allowed to ask for a password here, so name the fix instead.
+      return authBlocked(message) ? t('remote.auth', { message }) : message
     }
 
     /**
@@ -1727,6 +1757,23 @@ window.__ModuleLoader__.load({
       }, [cwd, t])
 
       /**
+       * Ask for the account one remote needs. The token is typed into a masked
+       * field and travels only as far as git's own credential helper.
+       * @param {string} name - the remote to authenticate against.
+       */
+      const openCredential = useCallback((name) => {
+        setDialog({
+          kind: 'credential',
+          title: t('remote.credential', { name }),
+          hint: t('remote.credentialHint'),
+          name,
+          username: '',
+          password: '',
+          error: '',
+        })
+      }, [t])
+
+      /**
        * Apply the edited remote table as one ordered batch of git calls.
        * @param {Array<object>} rows - the draft table.
        * @param {Array<object>} original - the table as it was loaded.
@@ -1742,10 +1789,21 @@ window.__ModuleLoader__.load({
         setNotice(null)
         try {
           let last = null
-          for (const op of ops) last = await api('remote', { cwd, sessionId, ...op })
+          let authName = ''
+          for (const op of ops) {
+            last = await api('remote', { cwd, sessionId, ...op })
+            if (last.needsAuth === true) authName = last.authName ?? op.name
+          }
           if (last !== null && last.status !== null && last.status !== undefined) setData({ ...last.status, cwd })
           setDialog(null)
           setBranchData(null)
+          // A remote that will not answer without credentials is not a saved
+          // remote yet: ask for the account here instead of at the next push.
+          if (authName !== '') {
+            setNotice({ kind: 'error', text: t('remote.authNeeded', { name: authName }) })
+            openCredential(authName)
+            return
+          }
           setNotice({ kind: 'ok', text: t('remote.done') })
         } catch (error) {
           setNotice({ kind: 'error', text: t('op.failed', { label: t('remote.title'), message: errorText(t, error) }) })
@@ -1755,8 +1813,40 @@ window.__ModuleLoader__.load({
         } finally {
           setOpBusy(false)
         }
-      }, [cwd, opBusy, refresh, sessionId, t])
+      }, [cwd, openCredential, refresh, sessionId, t])
 
+      /**
+       * Store one remote's credentials, then let the Host prove they work.
+       * @param {object} draft - the credential dialog.
+       * @returns {Promise<void>} settles when git has answered.
+       */
+      const saveCredential = useCallback(async (draft) => {
+        setOpBusy(true)
+        setNotice(null)
+        try {
+          const answer = await api('remote', {
+            cwd,
+            sessionId,
+            action: 'credential',
+            name: draft.name,
+            username: draft.username,
+            password: draft.password,
+          })
+          setDialog(null)
+          setBranchData(null)
+          setNotice(answer.needsAuth === true
+            ? { kind: 'error', text: t('remote.credentialFailed', { name: draft.name }) }
+            : { kind: 'ok', text: t('remote.credentialDone') })
+          await refresh({ silent: true })
+        } catch (error) {
+          // The token stays out of the notice: only the dialog shows the reason.
+          setDialog(previous => (previous === null || previous.kind !== 'credential'
+            ? previous
+            : { ...previous, error: errorText(t, error) }))
+        } finally {
+          setOpBusy(false)
+        }
+      }, [cwd, refresh, sessionId, t])
       /**
        * Delete a branch, and ask again with force when git says it is unmerged.
        * @param {object} branch - the branch row.
@@ -1899,7 +1989,10 @@ window.__ModuleLoader__.load({
        * @param {string} value - its new text.
        */
       const editDialog = useCallback((field, value) => {
-        setDialog(previous => (previous === null ? previous : { ...previous, [field]: value }))
+        // Typing again means the old complaint no longer stands.
+        setDialog(previous => (previous === null
+          ? previous
+          : { ...previous, [field]: value, error: '' }))
       }, [])
 
       /**
@@ -1940,6 +2033,18 @@ window.__ModuleLoader__.load({
           run()
           return
         }
+        if (dialog.kind === 'credential') {
+          const username = String(dialog.username ?? '').trim()
+          const password = String(dialog.password ?? '')
+          if (username === '' || password === '') {
+            setDialog(previous => (previous === null || previous.kind !== 'credential'
+              ? previous
+              : { ...previous, error: t('remote.credentialIncomplete') }))
+            return
+          }
+          void saveCredential({ ...dialog, username, password })
+          return
+        }
         if (dialog.method === undefined) {
           setDialog(null)
           return
@@ -1950,7 +2055,7 @@ window.__ModuleLoader__.load({
         payload[dialog.field] = value
         setDialog(null)
         void runOp(dialog.method, payload, dialog.verb ?? dialog.title, true)
-      }, [dialog, runOp, saveRemotes, t])
+      }, [dialog, runOp, saveCredential, saveRemotes, t])
 
       const toggleDir = useCallback((key) => {
         setCollapsedDirs(previous => {
