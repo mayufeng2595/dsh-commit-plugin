@@ -1,0 +1,9 @@
+- insert:
+    - id: git-commit
+      name: '@local/dsh-git-commit'
+      config:
+        # 部署默认位置: tab = 「对话/轨迹」旁的顶部标签页 | sidebar = 右侧边栏的标签面板
+        # 用户可在 插件 → 已安装 → Git 提交 → 面板位置 里随时改，覆盖这里的取值且立即生效
+        placement: tab
+        # forbid: no agent tool | confirm: approval prompt on every agent commit | allow: agent commits directly
+        agentCommit: confirm

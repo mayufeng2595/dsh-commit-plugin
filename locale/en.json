@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git commit",
+    "description": "Adds a \"Commit\" tab, beside the conversation's Chat/Trajectory tabs by default. Its location is a setting, not a rebuild: the plugin's own card (插件 → 已安装 → Git 提交) moves it to the right sidebar with its 面板位置 switch, whose start-page Commit capsule then opens it, and the panel moves the moment you choose — no restart, no config edit. The plugin's placement row config only supplies the deployment default. The tab follows the Session's workspace, scans every Git project inside it (multi-project workspaces list each sub-project), shows uncommitted files with per-file diffs, and commits only what you check. The toolbar rolls back selected changes, groups files by directory (single-child chains collapse), and holds settings plus close. The tab hides itself while the workspace scan finds no repository. Also exposes an optional git_commit agent tool controlled by agentCommit (default confirm, so every agent commit asks you first). Requires a local git executable; push needs an existing upstream branch. Agents' bash edits are not marked as Session changes."
+  }
+}
