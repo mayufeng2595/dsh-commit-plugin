@@ -59,7 +59,7 @@ function loadHelpers() {
     'renderBranchSubmenu',
     'renderBranchPopup', 'diffRemotes',
     'renderBranchDialog',
-    'errorText',
+    'KeyIcon', 'authBlocked', 'errorText',
   ]
   const body = names.map(extractFunction).join('\n\n')
   const factory = new Function('h', 'React', 'CSS', `
@@ -609,6 +609,7 @@ const remoteDialog = ui.renderBranchDialog({
   },
   onField: (field, value) => dialogCalls.push(['field', field, value]),
   onRow: (index, field, value) => dialogCalls.push(['row', index, field, value]),
+  onCredential: name => dialogCalls.push(['credential', name]),
   onSubmit: () => dialogCalls.push(['submit']),
   onCancel: () => dialogCalls.push(['cancel']),
 })
@@ -616,17 +617,63 @@ const remoteInputs = elements(remoteDialog, 'input')
 assert.equal(remoteInputs.length, 4, 'every row edits its name and its URL')
 assert.equal(remoteInputs[0].props.disabled, false, 'an existing remote can be renamed in place')
 assert.equal(remoteInputs[2].props.disabled, false, 'the new row types its own name')
+
+// Only a saved http(s) remote can take an account: git has no token for ssh.
+const keyRows = elements(remoteDialog, 'button').filter(node => node.props['aria-label'] === 'remote.credential')
+assert.equal(keyRows.length, 1, 'the https remote offers its credential button')
+keyRows[0].props.onClick()
+assert.deepEqual(dialogCalls.at(-1), ['credential', 'origin'], 'and names the saved remote, not the draft')
+
 elements(remoteDialog, 'button').find(node => node.props['aria-label'] === 'remote.remove').props.onClick()
-assert.deepEqual(dialogCalls[0], ['row', 0, 'remove', ''])
+assert.deepEqual(dialogCalls.at(-1), ['row', 0, 'remove', ''])
 remoteDialog.props.onClick()
 assert.deepEqual(dialogCalls.at(-1), ['cancel'], 'clicking past the card closes it')
+
+// The credential dialog takes an account and a secret, and hides the secret.
+const credentialCalls = []
+const credentialDialog = ui.renderBranchDialog({
+  t,
+  busy: false,
+  dialog: {
+    kind: 'credential',
+    title: 'remote.credential',
+    hint: 'remote.credentialHint',
+    name: 'origin',
+    username: 'octocat',
+    password: '',
+    error: 'remote.credentialIncomplete',
+  },
+  onField: (field, value) => credentialCalls.push([field, value]),
+  onRow: () => {},
+  onCredential: () => {},
+  onSubmit: () => credentialCalls.push(['submit']),
+  onCancel: () => credentialCalls.push(['cancel']),
+})
+const secretFields = elements(credentialDialog, 'input')
+assert.deepEqual(secretFields.map(node => node.props['aria-label']), ['remote.credentialField', 'remote.credentialSecret'])
+assert.equal(secretFields[1].props.type, 'password', 'the token is masked')
+assert.ok(JSON.stringify(credentialDialog).includes('remote.credentialIncomplete'), 'the dialog reports why it refused')
+secretFields[1].props.onChange({ target: { value: 'ghp_token' } })
+assert.deepEqual(credentialCalls[0], ['password', 'ghp_token'])
+assert.equal(elements(credentialDialog, 'button').find(node => node.props.className === 'dshgc-primary').props.disabled, true,
+  'an empty token keeps the button off')
+secretFields[1].props.onKeyDown({ key: 'Enter', preventDefault: () => {}, stopPropagation: () => {} })
+assert.deepEqual(credentialCalls.at(-1), ['submit'], 'Enter in the token field submits')
+const filled = ui.renderBranchDialog({
+  t,
+  busy: false,
+  dialog: { kind: 'credential', title: 'remote.credential', name: 'origin', username: 'octocat', password: 'ghp_token', error: '' },
+  onField: () => {}, onRow: () => {}, onCredential: () => {}, onSubmit: () => {}, onCancel: () => {},
+})
+assert.equal(elements(filled, 'button').find(node => node.props.className === 'dshgc-primary').props.disabled, false,
+  'a full pair of fields enables the button')
 
 // A table that failed to load must not also claim the repository has no remote.
 const failedRemoteDialog = ui.renderBranchDialog({
   t,
   busy: false,
   dialog: { kind: 'remotes', title: 'Git Remotes', loading: false, error: 'unknown method "remotes"', rows: [], original: [] },
-  onField: () => {}, onRow: () => {}, onSubmit: () => {}, onCancel: () => {},
+  onField: () => {}, onRow: () => {}, onCredential: () => {}, onSubmit: () => {}, onCancel: () => {},
 })
 const failedRemoteText = JSON.stringify(failedRemoteDialog)
 assert.ok(failedRemoteText.includes('unknown method'), 'the error is shown')
@@ -640,6 +687,12 @@ stale.code = 'not-found'
 assert.equal(ui.errorText(t, stale), 'op.stale')
 assert.equal(ui.errorText(t, new Error('git failed')), 'git failed')
 assert.equal(ui.errorText(t, 'plain'), 'plain')
+
+// git cannot ask for a password here, so an auth failure has to name the fix.
+const authLine = "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+assert.equal(ui.authBlocked(authLine), true)
+assert.equal(ui.authBlocked('remote: Repository not found.'), false, 'a missing repository is not an account problem')
+assert.equal(ui.errorText(t, new Error(authLine)), 'remote.auth')
 
 const compareDialog = ui.renderBranchDialog({
   t,

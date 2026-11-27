@@ -1,5 +1,5 @@
 {
-  "name": "@local/dsh-git-commit",
+  "name": "dsh-commit-plugin",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -21,7 +21,8 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "README_en.md"
   ],
   "keywords": [
     "dsh",

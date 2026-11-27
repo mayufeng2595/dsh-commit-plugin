@@ -1,5 +1,5 @@
 /**
- * dsh-git-commit — Host half.
+ * dsh-commit-plugin — Host half.
  *
  * One same-origin HTTP surface backs the sidebar panel:
  *
@@ -1813,7 +1813,7 @@ async function checkoutOf(cwd, sessionId, rev, smart, settings, touchedBySession
     }
     await mustGit(
       root,
-      ['stash', 'push', '--include-untracked', '-m', `dsh-git-commit: checkout ${target}`],
+      ['stash', 'push', '--include-untracked', '-m', `dsh-commit-plugin: checkout ${target}`],
       undefined, settings, 'stash-failed',
     )
     stashed = true
@@ -2045,7 +2045,7 @@ async function stashOf(cwd, sessionId, payload, settings, touchedBySession) {
     ? ['stash', 'push', '--include-untracked', '-m',
       typeof payload?.message === 'string' && payload.message.trim() !== ''
         ? payload.message.trim().slice(0, 200)
-        : 'dsh-git-commit']
+        : 'dsh-commit-plugin']
     : ['stash', action]
   return syncOp(root, args, { timeoutMs: 120_000 }, settings, sessionId, touchedBySession, 'stash-failed')
 }

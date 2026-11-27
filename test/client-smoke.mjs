@@ -40,7 +40,7 @@ const sandbox = {
   },
 }
 vm.runInNewContext(code, sandbox, { filename: 'client.js' })
-assert.equal(registration.id, '@local/dsh-git-commit')
+assert.equal(registration.id, 'dsh-commit-plugin')
 
 function useStub() { throw new Error('hook called outside a component render') }
 class Component {
@@ -273,7 +273,7 @@ servedPlacement = 'tab'
   cardCallbacks[0]()
   const card = seats.find(seat => seat.name === 'plugins.bundle.config')
   assert.ok(card, 'registers the section on the bundle page')
-  assert.equal(card.key, '@local/dsh-git-commit', 'keyed by the bundle the page is about')
+  assert.equal(card.key, 'dsh-commit-plugin', 'keyed by the bundle the page is about')
   assert.equal(card.locale, 'gitCommit')
   assert.equal(card.inject().configForm, scope, 'the section reads and writes through the form')
   // The form says sidebar even though the Host route answered tab.

@@ -1,193 +1,166 @@
-# dsh-git-commit
+# dsh-commit-plugin
 
-A DeepSeek Harness bundle that adds an IDEA-style **提交 / Commit** view beside
-the conversation's 对话/轨迹 tabs: every uncommitted file of the Session's own
-project, a per-file unified diff, checkbox selection, and a commit box that
-commits only what you checked. The tab is session-scoped — each Session shows
-its own repository, so there is no project picker on every open.
+[English](README_en.md)
 
-The tab appears only when the Session's workspace contains at least one git
-repository: on first use the Host scans the workspace directory
-(breadth-first, bounded: depth ≤ 4, ~800 directories, up to 60 projects,
-dependency/build folders skipped), caches the answer per workspace for a
-minute, and hides the tab whenever a finished scan found nothing. The footer's
-**项目** selector lists exactly those discovered repositories — including every
-independent sub-project of a multi-repository workspace such as `~/work`, so
-each sub-project commits on its own.
+一个 DeepSeek Harness 插件包，在「对话 / 轨迹」标签旁加出一个 IDEA 风格的**提交**面板：
+列出当前会话所属项目里所有未提交的文件，点开任意文件看逐行 diff，勾选之后只提交你选中的
+那部分。面板跟着会话走，每个会话显示自己的仓库，所以不用每次进来都选项目。
 
-It also exposes an optional `git_commit` agent tool. The agent's permission is
-deployment configuration: `forbid`, `confirm` (default), or `allow`.
+只有当会话的工作区里至少有一个 git 仓库时，这个标签才会出现：第一次打开时 Host 会扫描
+工作区目录（广度优先，规模有上限：深度 ≤ 4、约 800 个目录、最多 60 个项目，跳过依赖和
+构建目录），结果按工作区缓存一分钟，扫完什么都没找到就把标签藏起来。底部的**项目**选择器
+列出的就是这些仓库——`~/work` 这类多仓库工作区里的每个独立子项目都在其中，各自单独提交。
 
-The toolbar mirrors the IDE commit view: rollback (discard selected changes),
-show diff, group by directory, expand/collapse all, panel settings, and close.
-It also opens with **update / push / remotes**, and the branch pill in the
-header is a button: it drops the same branch popup the IDE's widget shows —
-a search box, the commands above the list (Update Project, Fetch, Push, New
-Branch, Checkout Tag or Revision, Remotes, Stash), then **本地 / 远程 / 标签**
-groups. One click on a branch unfolds its operations: checkout (smart when the
-tree is dirty), new branch from it, merge it into the current branch, rebase
-the current branch onto it, compare, update, push, tracking branch, rename,
-delete.
-Files split into **更改 / Changes** and **未进行版本管理的文件 / Unversioned
-Files**; inside a group, a directory whose only child is another directory
-collapses into one `src/client` row. The footer offers **提交** and **提交并推送**
-(the push only runs after a successful commit, and creates the upstream the
-first time there is none).
+插件另外提供一个可选的 `git_commit` Agent 工具，Agent 的权限属于部署配置：`forbid`、
+`confirm`（默认）或 `allow`。
 
-## Use
+工具栏对齐 IDE 的提交视图：回滚（丢弃选中改动）、显示 diff、按目录分组、全部展开/收起、
+面板设置、关闭。另外还直接提供**更新 / 推送 / 管理远程**入口；头部的分支胶囊是个按钮，
+点开就是 IDE 那个分支弹层：顶部搜索框，列表上方的命令（更新项目、抓取、推送、新建分支、
+签出标记或修订、管理远程、暂存未提交改动），然后是**本地 / 远程 / 标签**三组。鼠标划过
+分支行、用键盘移动到它、或者直接点它，都会在列表旁边展开一个二级菜单，和 IDEA 一致：
+签出（工作区脏的时候是智能签出）、从它新建分支、把它合并进当前分支、把当前分支变基到它、
+比较、更新、推送、设置跟踪分支、重命名、删除。文件分成**更改**和**未进行版本管理的文件**
+两组；组内如果某个目录下只有一个子目录，会压缩成一行 `src/client`。底部提供**提交**和
+**提交并推送**（推送只在提交成功后执行，首次没有上游时自动创建）。
 
-1. Open any Session whose workspace is a Git repository.
-2. Open the **提交** tab: by default in the header row beside 对话/轨迹. To put it
-   in the right sidebar instead — where the start page's **提交** capsule opens
-   it — pick 右侧边栏 under 面板位置 on the plugin's own card (侧边栏 **插件** →
-   **已安装** → **Git 提交**). The panel moves as soon as you choose, with no
-   restart and no config edit. The tab is hidden while a workspace scan finds no
-   repository.
-3. The tab reads the bound Session's working directory automatically; use the
-   **项目** selector only to point this tab at a different workspace directory.
-4. Click a file row to expand its diff against `HEAD`; untracked files show an
-   all-added diff. Drag the seam between the list and the diff to give either
-   side more room; the two versions share a seam of their own.
-5. The 当前版本 pane is editable in place: click into it and type. There is no
-   edit mode to enter or leave — the diff colours, line numbers, and the
-   alignment with the old version stay put, and the text is written back to
-   the working tree shortly after you stop typing.
-6. Check the files to commit, write a message, and press **提交选中文件**
-   (or ⌘/Ctrl + Enter). Unchecked changes stay in the working tree.
-7. A folder that is not a Git repository shows **没有未提交的改动** with an
-   IDE-style **创建 Git 仓库** button: it runs `git init -b main`, writes a
-   starter `.gitignore` (never overwriting an existing file), and immediately
-   shows the new repository's uncommitted files.
-8. **回滚** discards the checked files' uncommitted changes — tracked files are
-   restored from `HEAD`, staged-but-uncommitted additions are removed, and
-   untracked files are deleted. It asks for confirmation first; this cannot be
-   undone.
-9. The gear popover toggles auto-refresh and whether a freshly opened project
-   starts with everything checked.
-10. The branch pill opens the branch popup. Everything there runs git directly
-    and reports its output in the notice bar: **更新项目** pulls with the update
-    method chosen in the popover (merge, rebase, or fast-forward only), **抓取**
-    fetches every remote, **推送** pushes the current branch and creates its
-    upstream when it has none, **签出** switches branches, and a checkout with
-    uncommitted work carries that work across with a stash and restores it.
-11. **与 {ref} 比较** opens a dialog with the commits each side holds on its own
-    and the file differences between the two branches.
-12. **管理远程** opens the IDE's remote table: every remote's name and URL, an
-    add row, and a remove button. **确定** applies the whole table as ordered
-    `git remote` calls (removes, renames, URL changes, then adds), and a new
-    remote is fetched once so its branches appear at once. A row with no name
-    or no URL stops the save with a note in the dialog, before git is called.
-13. When a merge or rebase stops on conflicts the panel says so in a banner
-    under the toolbar and offers **继续** / **中止**. Resolving means editing the
-    conflicted files here and committing them like any other change.
+## 使用
 
-The panel refreshes on open, on window focus, and every four seconds while it
-is visible. A file written by the agent through `write`, `edit`, `apply_patch`,
-or `str_replace_editor` in the current Session is marked **本会话修改**. The
-commit-message draft is kept per project across panel switches and reloads.
+1. 打开一个工作区是 Git 仓库的会话。
+2. 打开**提交**标签：默认在「对话/轨迹」旁边的顶部标签行。想把它放到右侧边栏（开始页的
+   **提交**胶囊就打开在那里），到插件自己的卡片上（侧边栏**插件** → **已安装** →
+   **Git 提交**）把**面板位置**选成右侧边栏。选完面板立刻挪过去，不用重启，也不用改配置。
+   工作区扫描不到仓库时，标签会自动隐藏。
+3. 标签会自动读取所绑定会话的工作目录；**项目**选择器只用来把这个标签指向工作区里的
+   另一个目录。
+4. 点击文件行展开它与 `HEAD` 的 diff；未跟踪文件显示为全新增。拖动列表和 diff 之间的
+   分隔条，可以给任意一侧腾出更多空间；两个版本窗格之间也有一条自己的分隔条。
+5. 「当前版本」窗格可以直接编辑：点进去就能打字。没有需要进出的编辑模式——diff 配色、
+   行号、和旧版本的对齐关系都不动，停止输入一小会儿后内容写回工作区。
+6. 勾选要提交的文件，写好说明，按**提交选中文件**（或 ⌘/Ctrl + Enter）。没勾选的改动
+   留在工作区里。
+7. 不是 Git 仓库的目录会显示**没有未提交的改动**，并给出一个 IDE 风格的**创建 Git 仓库**
+   按钮：执行 `git init -b main`，写一份起步的 `.gitignore`（绝不覆盖已有文件），然后立刻
+   显示新仓库的未提交文件。
+8. **回滚**丢弃勾选文件的未提交改动——已跟踪文件从 `HEAD` 恢复，已暂存但没提交的新增会被
+   移除，未跟踪文件直接删除。执行之前要求确认，而且无法撤销。
+9. 齿轮弹层可以开关自动刷新、决定新打开的项目是否默认全部勾选，以及**更新项目**用哪种方式
+   拉取（merge、rebase 或仅快进）。
+10. 分支胶囊打开分支弹层。里面每一项都直接跑 git，结果输出在提示条上：**更新项目**按弹层里
+    选定的方式拉取，**抓取**对所有远程 fetch，**推送**推送当前分支并在没有上游时创建上游，
+    **签出**切换分支；带着未提交改动签出时，会先用 stash 把改动带过去再恢复。
+11. **与 {ref} 比较**从分支行的二级菜单进入。打开的对话框列出两边各自独有的提交，以及两个
+    分支之间的文件差异。
+12. **管理远程**打开 IDE 那张远程表格：每个远程的名称和 URL、一行新增、一个删除按钮。
+    **确定**会把整张表按顺序变成一串 `git remote` 调用（先删除、再重命名、再改 URL、最后
+    新增），新增的远程会立刻 fetch 一次，它的分支马上出现。某一行没填名称或 URL 时，保存
+    会在调用 git 之前停下来，并在对话框里说明。已保存的 http(s) 行还带一个钥匙按钮，用来
+    管理它的凭据；如果 fetch 或改 URL 时的探测发现这个远程不接受匿名访问，对话框不会假装
+    成功，而是转而弹出用户名 + 访问令牌表单。令牌交给 git 自己的凭据助手（macOS 上是钥匙串），
+    保存后会再探测一次，确认它真的能访问了。
+13. 合并或变基停在冲突上时，工具栏下方会出现横幅说明当前状态，并提供**继续** / **中止**。
+    所谓解决冲突，就是在这里把冲突文件编辑好，再像普通改动一样提交。
 
-Updating the plugin itself depends on which half changed. `client.js` is handed to
-the page on every load, so a reload of the DSH window is enough. `index.js` is read
-once when the Host process starts, so a new operation added there stays invisible
-until DSH is restarted; the panel reports it as missing instead of guessing.
+面板在打开时、窗口重新获得焦点时刷新，可见期间每四秒自动刷新一次。Agent 在当前会话里通过
+`write`、`edit`、`apply_patch`、`str_replace_editor` 写过的文件会标上**本会话修改**。提交
+说明的草稿按项目保存，切换面板、重新加载之后都还在。
 
-## Configuration
+两条分隔条的拖动完全绕开 React：一次鼠标移动只在一个 `requestAnimationFrame` 回调里写一个
+CSS 变量，鼠标松开才更新 React 状态，拖动期间四秒轮询暂停。所以几千行的文件列表、几千行的
+diff 也能贴着光标走，不卡顿。
 
-**Where the panel sits is a GUI setting.** The plugin's card in the 插件 panel
-(侧边栏 **插件** → **已安装** → **Git 提交**) carries a **Git 提交面板** section: a
-面板位置 switch between 对话顶部标签页 and 右侧边栏, plus a **恢复插件配置** button
-that drops the override and falls back to the row Config below. The switch writes
-into the active profile's patch (`~/.dsh/profiles/<profile>/cordis.patch.yml`) as a
-`config` block on the `git-commit` row, so it survives restarts, and every open
-window follows it live: the Host commits the change into the running plugin's
-configuration and the browser half re-mounts the panel in the other seat, with no
-reload and no restart.
+更新插件本身取决于改了哪一半。`client.js` 每次页面加载都会重新下发，重载一次 DSH 窗口就够了。
+`index.js` 只在 Host 进程启动时读一次，在那里新增的操作要等 DSH 重启才可见；面板遇到这种
+情况会直接说操作缺失，不会靠猜。
 
-Everything else is deployment configuration in `cordis.patch.yml`, which this
-bundle inserts with `placement: tab` and `agentCommit: confirm`:
+## 配置
+
+**面板位置是图形界面设置。** 插件在**插件**面板里的卡片（侧边栏**插件** → **已安装** →
+**Git 提交**）有一个 **Git 提交面板**区块：**面板位置**在「对话顶部标签页」和「右侧边栏」
+之间切换，还有一个**恢复插件配置**按钮，去掉覆盖、回到下面说的 Config 配置项。这个开关会
+写进当前 profile 的 patch（`~/.dsh/profiles/<profile>/cordis.patch.yml`），落在 `git-commit`
+行的 `config` 块里，所以重启不丢；每个已经打开的窗口实时跟随：Host 把改动提交进正在运行的
+插件配置，浏览器那一半再把面板搬到另一个位置，不用重载也不用重启。
+
+其余都是 `cordis.patch.yml` 里的部署配置，本插件包插入的那行默认 `placement: tab`、
+`agentCommit: confirm`：
 
 ```yaml
 - id: git-commit
-  name: '@local/dsh-git-commit'
+  name: 'dsh-commit-plugin'
   config:
     placement: tab
     agentCommit: confirm
 ```
 
-Override it from the profile's own `cordis.patch.yml` with a row of the same
-`id`; an override replaces the complete `config`.
+想覆盖它，就在 profile 自己的 `cordis.patch.yml` 里写一行相同的 `id`；覆盖会替换完整的
+`config`。
 
-| Field | Default | Meaning |
+| 字段 | 默认 | 含义 |
 |---|---|---|
-| `placement` | `tab` | Deployment default for the panel's location: `tab` adds it beside 对话/轨迹, `sidebar` puts it in DSH's right sidebar. Any other value keeps `tab`. A value picked in 插件 → 已安装 → Git 提交 → 面板位置 overrides this row live; the row alone applies where the plugin's configuration section is unavailable. `sidebar` needs a DSH build that has the right sidebar; on one that does not, neither source mounts anything. |
-| `agentCommit` | `confirm` | `forbid` registers no `git_commit` tool; `confirm` routes every agent commit through DSH's approval prompt; `allow` commits directly. |
-| `gitBinary` | `git` | Executable used for every git call. |
-| `maxDiffChars` | `409600` | Largest diff returned to the panel; longer text is clipped with a truncation marker. |
-| `initBranch` | `main` | Branch name the create-repository action starts on. |
-| `initScaffold` | `true` | Write the starter `.gitignore` when creating a repository; existing files are never overwritten. |
+| `placement` | `tab` | 面板位置的部署默认值：`tab` 把它加在「对话/轨迹」旁边，`sidebar` 放进 DSH 的右侧边栏。其他取值仍按 `tab`。在 插件 → 已安装 → Git 提交 → 面板位置 里选的值会实时覆盖这一行；只有在拿不到插件配置区块的地方，才只由这一行决定。`sidebar` 需要 DSH 的构建带右侧边栏，不带时两个来源都挂不出面板。 |
+| `agentCommit` | `confirm` | `forbid` 不注册 `git_commit` 工具；`confirm` 让 Agent 的每次提交都走 DSH 的审批提问；`allow` 直接提交。 |
+| `gitBinary` | `git` | 每次 git 调用使用的可执行文件。 |
+| `maxDiffChars` | `409600` | 返回给面板的最大 diff 长度，更长的文本会被截断并留下截断标记。 |
+| `initBranch` | `main` | 创建仓库操作使用的起始分支名。 |
+| `initScaffold` | `true` | 创建仓库时写入起步的 `.gitignore`；已有文件绝不覆盖。 |
 
-The agent tool commits the Session's current working directory: `paths`
-omitted means every uncommitted change; the message is required and blank
-messages are rejected. It never pushes and never runs `git add -A` outside the
-selected paths.
+Agent 工具提交的是会话当前的工作目录：不传 `paths` 就是所有未提交改动；说明必填，空的说明
+会被拒绝。它从不推送，也不会对选中路径之外执行 `git add -A`。
 
-## Behavior details
+## 行为细节
 
-- Git runs as an argv array (no shell string), from the repository root, with
-  `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`, and `GIT_EDITOR=true`.
-- The status list is `git status --porcelain=v2 -z --untracked-files=all
-  --branch`; per-file line stats come from `git diff --numstat -z` for the
-  index and the working tree.
-- A commit stages the selected paths, then runs `git commit -F - -- <paths>`.
-  Files that were already staged but not selected stay staged. A file with both
-  staged and unstaged changes is tagged **部分暂存** and is committed at its full
-  working-tree state.
-- An unresolved merge conflict is refused with `unresolved-conflict` instead of
-  staging the conflict markers.
-- The working-tree pane is one `contenteditable` body: a block per file line,
-  with deleted-line and hunk rows kept as non-editable placeholders so the two
-  columns stay aligned. Typing autosaves to the working tree ~800 ms after the
-  last keystroke; switching file or project, and committing, flush first. A
-  truncated preview (over 6000 rows) stays read-only.
-- The HTTP surface is `POST /dsh-git-commit/api/<status|preview|diff|commit|
-  discover|init|read|write|rollback|config|branches|fetch|pull|push|checkout|
-  branch|merge|rebase|compare|tracking|stash|remotes|remote>` on DSH's own web
-  server. Requests are same-origin (or loopback) only and JSON-only. Every
-  branch and sync route answers with a fresh `status`, so the panel needs no
-  extra round trip after it runs.
-- The `config` route answers the `placement` the Host currently resolves, so a
-  client that cannot reach the configuration form still mounts in the right seat.
-- Non-repository directories and missing `git` produce empty states, not
-  errors.
+- git 以 argv 数组运行（不拼 shell 字符串），工作目录是仓库根，环境里带
+  `GIT_TERMINAL_PROMPT=0`、`GIT_OPTIONAL_LOCKS=0`、`GIT_EDITOR=true`。
+- 状态列表来自 `git status --porcelain=v2 -z --untracked-files=all --branch`；每个文件的
+  行数统计来自 `git diff --numstat -z`，分别取索引和工作区。
+- 提交先暂存选中的路径，再执行 `git commit -F - -- <paths>`。已经暂存但没勾选的文件保持
+  暂存。同时有已暂存和未暂存改动的文件会标上**部分暂存**，按工作区的完整内容提交。
+- 存在未解决的冲突时提交会被拒绝，返回 `unresolved-conflict`，而不是把冲突标记暂存进去。
+- 「当前版本」窗格是一个 `contenteditable`：每行文件内容一个块，删除行和 hunk 头保留为
+  不可编辑的占位，两列因此始终对齐。打字在最后一次按键约 800 ms 后自动写回工作区；切换
+  文件或项目、以及提交之前都会先落盘。超过 6000 行的截断预览保持只读。
+- HTTP 接口是 DSH 自带 web 服务上的
+  `POST /dsh-git-commit/api/<status|preview|diff|commit|discover|init|read|write|rollback|
+  config|branches|fetch|pull|push|checkout|branch|merge|rebase|compare|tracking|stash|
+  remotes|remote>`。只接受同源（或回环）请求，只接受 JSON。每个分支类和同步类接口都会顺带
+  返回一份新的 `status`，面板执行完不用再发一次请求。
+- `remote` 接口会用 `git ls-remote --heads` 探测每个新增或改过地址的 URL，git 报告终端提问
+  被禁用时返回 `needsAuth`，并指明是哪一行需要。写入凭据走 `git credential approve`，密钥
+  只存在于传给 git 标准输入的那段文本里：不进响应、不进日志、也不写进仓库配置。只有 http(s)
+  远程接受凭据，ssh 地址会按非法请求拒绝。
+- `config` 接口返回 Host 当前解析出的 `placement`，所以即使客户端拿不到配置表单，也能把面板
+  挂到正确的位置。
+- URL 前缀和浏览器侧的存储键名仍然写作 `dsh-git-commit`：它们早于 `dsh-commit-plugin` 这个
+  名字，改掉会让已保存的偏好和各项目的提交草稿凭空丢失。
+- 不是仓库的目录、以及 git 不存在，都返回空状态而不是报错。
 
-## Limitations
+## 限制
 
-- Push, pull, and fetch run with whatever credentials the local git already has
-  (a credential helper, an SSH agent, or the environment); the panel never
-  prompts for a password, and there is no amend, cherry-pick, or history view.
-- Only the local git executable is used; no remote credentials or SSH agent UI.
-- Agent `bash` edits are not marked **本会话修改** (only the dedicated file tools
-  are attributed).
-- The panel reflects the working tree relative to `HEAD`. Conflicts are
-  listed, and the banner offers to continue or abort the open operation; a
-  conflicted file still has to be edited and checked before the panel commits.
-- `git rev-parse @u` is not used to read the upstream: Apple's git resolves a
-  bare `@u` as a path, so the upstream comes from `for-each-ref`
-  `%(upstream:short)` instead.
-- The project list comes from Session working directories; with no Session at
-  all there is nothing to select until one is opened.
+- 推送、拉取、抓取用的都是本机 git 已有的凭据（凭据助手、SSH agent 或环境变量）。https
+  远程现在可以在**管理远程**里填用户名和访问令牌，由 git 的凭据助手保存；ssh 远程仍然归本机
+  git 环境管，这里没有 SSH agent 界面。没有 amend、cherry-pick，也没有历史视图。
+- git 不会在插件里弹出密码提问：没存过凭据的远程会返回 `needsAuth`，面板提示你去**管理远程**
+  填写，而不是静默失败。
+- Agent 用 `bash` 改的文件不会标**本会话修改**（只有专门的文件工具会被归属）。
+- 面板反映的是相对 `HEAD` 的工作区状态。冲突会列出来，横幅也提供继续或中止；但冲突文件仍然
+  要手动编辑好并勾选，面板才能提交。
+- 读上游分支不用 `git rev-parse @u`：Apple 自带的 git 会把裸的 `@u` 解析成路径，所以改用
+  `for-each-ref` 的 `%(upstream:short)`。
+- 项目列表来自会话的工作目录；一个会话都没有时，在打开会话之前没有可选的东西。
 
-## Files
+## 文件
 
-- `index.js` — Host half: git surface, same-origin API, `git_commit` tool, the
-  `Config` schema whose `placement` field is volatile.
-- `client.js` — Browser half: the panel, its copy, and the 面板位置 section.
-- `cordis.patch.yml` — bundle row.
-- `locale/{en,zh}.json` — Plugin Manager title and description.
-- `test/{smoke,client-smoke,render}.mjs` — `npm test`.
+- `index.js` — Host 一半：git 能力、同源接口、`git_commit` 工具，以及 `placement` 字段带
+  volatile 的 `Config` schema。
+- `client.js` — 浏览器一半：面板、文案，以及**面板位置**区块。
+- `cordis.patch.yml` — 插件包配置行。
+- `locale/{en,zh}.json` — 插件管理页的标题和说明。
+- `README.md` / `README_en.md` — 本文档，中英文各一份。
+- `test/{smoke,client-smoke,render}.mjs` — `npm test`。
 
-The Host half imports `@deepseek-ai/schemastery` for the `Config` schema, and the
-`volatile()` marker needs at least 3.19.0, which the DSH desktop profile ships. An
-installed copy resolves it from that profile's own `node_modules`; a checkout
-linked in from elsewhere needs one there too, e.g. `mkdir -p node_modules/@deepseek-ai && ln -s ~/.dsh/profiles/desktop/node_modules/@deepseek-ai/schemastery node_modules/@deepseek-ai/`.
-The copy under `~/.dsh/profiles/node_modules` is 3.18.1 and has no `volatile()`.
+Host 一半为 `Config` schema 引入 `@deepseek-ai/schemastery`，`volatile()` 至少需要 3.19.0，
+DSH 桌面 profile 自带的就是这个版本。安装进 profile 的副本会从该 profile 自己的
+`node_modules` 解析到它；从别处软链进来的 checkout 也需要在那里放一份，例如
+`mkdir -p node_modules/@deepseek-ai && ln -s ~/.dsh/profiles/desktop/node_modules/@deepseek-ai/schemastery node_modules/@deepseek-ai/`。
+`~/.dsh/profiles/node_modules` 下那份是 3.18.1，没有 `volatile()`。

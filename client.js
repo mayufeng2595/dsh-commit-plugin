@@ -1,5 +1,5 @@
 /**
- * dsh-git-commit — browser half.
+ * dsh-commit-plugin — browser half.
  *
  * One global sidebar panel ("改动" / "Changes"): the project's uncommitted
  * changes, a per-file unified diff, selective checkboxes, and a commit box.
@@ -8,10 +8,12 @@
  * conversation is hidden by the panel itself.
  *
  * The panel talks to the Host half at a mount-relative `dsh-git-commit/api/`
- * path, so a sub-path proxy keeps working.
+ * path, so a sub-path proxy keeps working. That prefix, like the localStorage
+ * keys below, is an internal namespace: it outlives the package name so a
+ * rename never costs anyone their saved preferences or commit drafts.
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-git-commit',
+  id: 'dsh-commit-plugin',
   factory(require) {
     const React = require('react')
     const { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } = React
@@ -31,7 +33,7 @@ window.__ModuleLoader__.load({
     const ENTRY_ID = 'git-commit'
     /** This bundle's package name: the key the 插件 page looks its own
      *  configuration section up by (`plugins.bundle.config`). */
-    const BUNDLE_PKG = '@local/dsh-git-commit'
+    const BUNDLE_PKG = 'dsh-commit-plugin'
     /** Below this panel width the file list and the diff stack instead of sharing a row. */
     const NARROW_PX = 640
     /** Reads one Session's working directory; replaced when the sessions service mounts. */
@@ -2363,6 +2365,7 @@ window.__ModuleLoader__.load({
           busy: opBusy,
           onField: editDialog,
           onRow: editRemoteRow,
+          onCredential: openCredential,
           onSubmit: submitDialog,
           onCancel: () => { setDialog(null) },
         }),
@@ -2987,6 +2990,15 @@ window.__ModuleLoader__.load({
       ])
     }
 
+    /** Key glyph, for the account one https remote needs. */
+    function KeyIcon() {
+      return icon([
+        h('circle', { cx: 5.2, cy: 5.2, r: 2.6, stroke: 'currentColor', strokeWidth: 1.4 }),
+        h('path', { d: 'M7.1 7.1 12.6 12.6', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }),
+        h('path', { d: 'M10.4 10.4 9 11.8M12.6 12.6l-1.4 1.4', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }),
+      ])
+    }
+
     /**
      * Whether one row's text answers the popup's search box.
      * @param {string} needle - the lower-cased query.
@@ -3253,7 +3265,7 @@ window.__ModuleLoader__.load({
      * @returns {object | null} the modal, or nothing while no dialog is open.
      */
     function renderBranchDialog(view) {
-      const { t, dialog, busy, onField, onRow, onSubmit, onCancel } = view
+      const { t, dialog, busy, onField, onRow, onCredential, onSubmit, onCancel } = view
       if (dialog === null || dialog === undefined) return null
       const title = dialog.title ?? ''
       if (dialog.kind === 'remotes') {
@@ -3289,6 +3301,19 @@ window.__ModuleLoader__.load({
                 'aria-label': t('remote.url'),
                 onChange: event => { onRow(index, 'url', event.target.value) },
               }),
+              // git cannot be asked for a password mid-push here, so the account
+              // is stored up front — but only where a token means anything.
+              row.originName !== '' && /^https?:\/\//i.test(row.url)
+                ? h('button', {
+                  type: 'button',
+                  className: 'dshgc-icon-button dshgc-tip',
+                  title: t('remote.credential', { name: row.originName }),
+                  'aria-label': t('remote.credential', { name: row.originName }),
+                  'data-tip': t('remote.credential', { name: row.originName }),
+                  disabled: busy,
+                  onClick: () => { onCredential(row.originName) },
+                }, h(KeyIcon))
+                : h('span', { 'aria-hidden': 'true' }),
               h('button', {
                 type: 'button',
                 className: 'dshgc-icon-button dshgc-tip',
@@ -3311,6 +3336,51 @@ window.__ModuleLoader__.load({
                   onClick: onSubmit,
                 }, busy ? t('remote.saving') : t('op.confirm')),
               ),
+            ),
+          ),
+        )
+      }
+      if (dialog.kind === 'credential') {
+        const enter = (event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          event.stopPropagation()
+          onSubmit()
+        }
+        return h('div', { className: 'dshgc-modal-mask', role: 'dialog', 'aria-modal': true, 'aria-label': title, onClick: onCancel },
+          h('div', { className: 'dshgc-modal', onClick: event => event.stopPropagation() },
+            h('div', { className: 'dshgc-modal-title' }, title),
+            dialog.hint ? h('div', { className: 'dshgc-modal-body' }, dialog.hint) : null,
+            dialog.error ? h('div', { className: 'dshgc-banner dshgc-banner-error' }, dialog.error) : null,
+            h('input', {
+              className: 'dshgc-dialog-input',
+              value: dialog.username ?? '',
+              placeholder: t('remote.credentialField'),
+              spellCheck: false,
+              autoFocus: true,
+              'aria-label': t('remote.credentialField'),
+              onChange: event => { onField('username', event.target.value) },
+              onKeyDown: enter,
+            }),
+            h('input', {
+              className: 'dshgc-dialog-input',
+              type: 'password',
+              value: dialog.password ?? '',
+              placeholder: t('remote.credentialSecret'),
+              'aria-label': t('remote.credentialSecret'),
+              onChange: event => { onField('password', event.target.value) },
+              onKeyDown: enter,
+            }),
+            h('div', { className: 'dshgc-modal-actions' },
+              h('button', { type: 'button', className: 'dshgc-secondary', onClick: onCancel }, t('op.cancel')),
+              h('button', {
+                type: 'button',
+                className: 'dshgc-primary',
+                disabled: busy
+                  || String(dialog.username ?? '').trim() === ''
+                  || String(dialog.password ?? '') === '',
+                onClick: onSubmit,
+              }, t('op.confirm')),
             ),
           ),
         )
@@ -3774,7 +3844,7 @@ window.__ModuleLoader__.load({
 .dshgc-dialog-input{width:100%;height:28px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}
 .dshgc-dialog-input:focus{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-1px}
 /* The remote table: name, URL, and one remove control per row. */
-.dshgc-remote-head,.dshgc-remote-row{display:grid;grid-template-columns:120px minmax(0,1fr) 30px;gap:6px;align-items:center}
+.dshgc-remote-head,.dshgc-remote-row{display:grid;grid-template-columns:120px minmax(0,1fr) 30px 30px;gap:6px;align-items:center}
 .dshgc-remote-head{padding:0 2px;font-size:11px;color:var(--dsw-alias-label-tertiary)}
 .dshgc-remote-name,.dshgc-remote-url{height:28px;min-width:0;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px}
 .dshgc-remote-name:disabled{opacity:.6}
