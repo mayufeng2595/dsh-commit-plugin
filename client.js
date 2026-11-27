@@ -2608,13 +2608,14 @@ window.__ModuleLoader__.load({
       }
 
       const leftShare = `${(splitRatio * 100).toFixed(2)}%`
-      const rightShare = `${(100 - splitRatio * 100).toFixed(2)}%`
       return h('div', { className: 'dshgc-preview' },
         head,
-        h('div', { className: 'dshgc-diff-box', ref: diffBoxRef },
+        // The share lives in a variable the drag can rewrite without React: the
+        // two panes below only read it.
+        h('div', { className: 'dshgc-diff-box', ref: diffBoxRef, style: { '--dshgc-left-share': leftShare } },
           h('div', {
             className: 'dshgc-pane',
-            style: { flexBasis: leftShare },
+            style: { flexBasis: 'var(--dshgc-left-share,50%)' },
           },
             h('div', { className: 'dshgc-pane-head' },
               h('span', { className: 'dshgc-pane-title' }, t('preview.old')),
@@ -2634,7 +2635,7 @@ window.__ModuleLoader__.load({
           }),
           h('div', {
             className: 'dshgc-pane',
-            style: { flexBasis: rightShare },
+            style: { flexBasis: 'calc(100% - var(--dshgc-left-share,50%))' },
           },
             h('div', { className: 'dshgc-pane-head' },
               h('span', { className: 'dshgc-pane-title' }, t('preview.new')),
