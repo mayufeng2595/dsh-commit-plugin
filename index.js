@@ -2070,6 +2070,63 @@ function remoteUrl(value) {
 }
 
 /**
+ * Whether git's own words say the remote is waiting for a person to authenticate.
+ *
+ * The plugin always runs git with `GIT_TERMINAL_PROMPT=0`, so an https remote
+ * with no stored credential fails instead of asking, and the raw line is
+ * meaningless to someone who has never seen it.
+ * @param {string} text - combined git output.
+ * @returns {boolean} true when credentials are what is missing.
+ */
+function authBlocked(text) {
+  return /terminal prompts disabled|could not read (?:Username|Password)|Authentication failed|incorrect username or password|invalid credentials/i
+    .test(String(text))
+}
+
+/**
+ * The stdin record `git credential approve` expects for one remote URL.
+ *
+ * The secret is written straight to git's stdin and appears nowhere else: not in
+ * the returned payload, not in the repository configuration, not in a log line.
+ * @param {unknown} url - the remote URL.
+ * @param {unknown} username - the account.
+ * @param {unknown} password - the password or access token.
+ * @returns {string} the record, terminated by the blank line git wants.
+ */
+function credentialInput(url, username, password) {
+  const address = remoteUrl(url)
+  let parsed
+  try {
+    parsed = new URL(address)
+  } catch {
+    throw new ApiError('bad-request', `${address} is not an http(s) remote URL`)
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new ApiError('bad-request', 'only http(s) remotes take a username and a token; ssh uses keys')
+  }
+  const account = typeof username === 'string' ? username.trim() : ''
+  const secret = typeof password === 'string' ? password.replace(/[\r\n]/g, '') : ''
+  // A newline in the account would forge extra fields into git's record.
+  if (account === '' || secret === '' || /[\0\r\n]/.test(account)) {
+    throw new ApiError('bad-request', 'a username and a password are both required')
+  }
+  return `protocol=${parsed.protocol.slice(0, -1)}\nhost=${parsed.host}\nusername=${account}\npassword=${secret}\n\n`
+}
+
+/**
+ * Ask one remote whether it answers, without touching the repository.
+ * @param {string} root - directory to run from.
+ * @param {unknown} url - the remote URL.
+ * @param {object} settings - normalized row configuration.
+ * @returns {Promise<{ ok: boolean, needsAuth: boolean, message: string }>} the answer.
+ */
+async function checkRemote(root, url, settings) {
+  const result = await runGit(root, ['ls-remote', '--heads', remoteUrl(url)], { timeoutMs: 30_000 }, settings)
+  const message = textOf(result)
+  return { ok: result.code === 0, needsAuth: result.code !== 0 && authBlocked(message), message }
+}
+
+/**
  * Read the remote table: name, fetch URL, and the push URL when it differs.
  * @param {string} root - repository root.
  * @param {object} settings - normalized row configuration.
@@ -2104,25 +2161,30 @@ async function remotesOf(cwd, settings) {
  * Add, rename, re-point or remove one remote.
  *
  * A new remote is fetched once so its branches show up in the popup at once;
- * a failing fetch is reported but never undoes the add.
+ * a failing fetch is reported but never undoes the add. When the failure is
+ * git refusing to ask for credentials, the answer says so: the dialog can then
+ * take a username and a token instead of leaving it for the next push to find.
  * @param {unknown} cwd - project directory.
  * @param {unknown} sessionId - Session identity.
- * @param {object} payload - `action`, `name`, `url`, `newName`, `push`.
+ * @param {object} payload - `action`, `name`, `url`, `newName`, `push`, `username`, `password`.
  * @param {object} settings - normalized row configuration.
  * @param {Map<string, Set<string>>} touchedBySession - session-touched paths.
- * @returns {Promise<object>} the fresh table, plus a status where it may have moved.
+ * @returns {Promise<object>} the fresh table, a status where it may have moved,
+ *   and whether one remote still wants credentials.
  */
 async function remoteOf(cwd, sessionId, payload, settings, touchedBySession) {
   const root = await repoRoot(cwd, settings)
   const action = payload?.action
   const name = revName(payload?.name, 'remote name')
   let output = ''
+  let needsAuth = false
   if (action === 'add') {
     await mustGit(root, ['remote', 'add', name, remoteUrl(payload.url)], undefined, settings, 'remote-failed')
     const fetched = await runGit(root, ['fetch', '--prune', name], { timeoutMs: 180_000 }, settings)
     output = fetched.code === 0
       ? textOf(fetched)
       : `remote ${name} added, but the first fetch failed:\n${textOf(fetched)}`
+    needsAuth = fetched.code !== 0 && authBlocked(textOf(fetched))
   } else if (action === 'remove') {
     output = textOf(await mustGit(root, ['remote', 'remove', name], undefined, settings, 'remote-failed'))
   } else if (action === 'rename') {
@@ -2133,11 +2195,23 @@ async function remoteOf(cwd, sessionId, payload, settings, touchedBySession) {
     if (payload.push === true) args.push('--push')
     args.push(name, remoteUrl(payload.url))
     output = textOf(await mustGit(root, args, undefined, settings, 'remote-failed'))
+    const check = await checkRemote(root, payload.url, settings)
+    needsAuth = check.needsAuth
+  } else if (action === 'credential') {
+    const row = (await remoteRows(root, settings)).find(entry => entry.name === name)
+    if (row === undefined) throw new ApiError('not-found', `no remote named ${name}`)
+    const input = credentialInput(row.url, payload.username, payload.password)
+    await mustGit(root, ['credential', 'approve'], { input }, settings, 'credential-failed')
+    const check = await checkRemote(root, row.url, settings)
+    needsAuth = check.needsAuth
+    output = check.ok
+      ? `credentials stored for ${name}`
+      : `stored, but ${name} still will not take them:\n${check.message}`
   } else {
     throw new ApiError('bad-request', `unknown remote action "${String(action)}"`)
   }
   const status = await statusOf(root, sessionId, settings, touchedBySession)
-  return { output, remotes: await remoteRows(root, settings), status }
+  return { output, remotes: await remoteRows(root, settings), status, needsAuth, authName: needsAuth ? name : '' }
 }
 
 /* ============================== agent tool ============================== */
